@@ -1,17 +1,30 @@
 import smtplib
+import socket
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
 
+# Force IPv4 — Render's IPv6 can't reach Gmail SMTP
+_original_getaddrinfo = socket.getaddrinfo
+
+def _ipv4_only_getaddrinfo(*args, **kwargs):
+    responses = _original_getaddrinfo(*args, **kwargs)
+    return [r for r in responses if r[0] == socket.AF_INET]
+
+socket.getaddrinfo = _ipv4_only_getaddrinfo
+
 
 def create_smtp_connection(sender_email, app_password):
     """Create and authenticate an SMTP connection to Gmail.
     
-    Uses SMTP_SSL on port 465 for secure connection.
+    Uses SMTP with STARTTLS on port 587 for broad hosting compatibility.
     Raises an exception if login fails.
     """
-    server = smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=30)
+    server = smtplib.SMTP('smtp.gmail.com', 587, timeout=30)
+    server.ehlo()
+    server.starttls()
+    server.ehlo()
     server.login(sender_email, app_password)
     return server
 

@@ -1,6 +1,8 @@
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 
 
 def create_smtp_connection(sender_email, app_password):
@@ -14,7 +16,8 @@ def create_smtp_connection(sender_email, app_password):
     return server
 
 
-def send_single_email(server, sender_email, recipient, subject, body):
+def send_single_email(server, sender_email, recipient, subject, body,
+                      attachment_bytes=None, attachment_filename=None):
     """Send a single email using an existing SMTP connection.
     
     Args:
@@ -23,6 +26,8 @@ def send_single_email(server, sender_email, recipient, subject, body):
         recipient: Recipient's email address
         subject: Email subject line
         body: Email body (plain text)
+        attachment_bytes: Optional file content as bytes to attach
+        attachment_filename: Optional filename for the attachment
     
     Returns:
         Tuple of (success: bool, error_message: str or None)
@@ -33,6 +38,17 @@ def send_single_email(server, sender_email, recipient, subject, body):
         msg['To'] = recipient
         msg['Subject'] = subject
         msg.attach(MIMEText(body, 'plain'))
+
+        # Attach file if provided
+        if attachment_bytes and attachment_filename:
+            part = MIMEBase('application', 'octet-stream')
+            part.set_payload(attachment_bytes)
+            encoders.encode_base64(part)
+            part.add_header(
+                'Content-Disposition',
+                f'attachment; filename="{attachment_filename}"'
+            )
+            msg.attach(part)
 
         server.send_message(msg)
         return True, None

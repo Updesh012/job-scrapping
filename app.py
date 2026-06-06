@@ -48,28 +48,26 @@ def extract():
 
 @app.route('/api/send-emails', methods=['POST'])
 def send_emails():
-    """Send emails to extracted HR contacts with real-time progress streaming.
+    """Send emails to extracted HR contacts with resume attachment and real-time progress.
     
-    Expects JSON body with:
-        - emails: list of recipient email addresses
+    Expects multipart form data with:
+        - emails: comma-separated list of recipient email addresses
         - subject: email subject line
         - body: email body text
         - sender_email: sender's Gmail address
         - app_password: Gmail app password
+        - resume: PDF file to attach (required)
     
     Returns NDJSON stream with progress updates for each email sent.
-    Each line is a JSON object with type 'progress', 'error', or 'complete'.
     """
-    data = request.json
+    emails_raw = request.form.get('emails', '')
+    subject = request.form.get('subject', '').strip()
+    body = request.form.get('body', '').strip()
+    sender_email = request.form.get('sender_email', '').strip()
+    app_password = request.form.get('app_password', '').strip()
+    resume_file = request.files.get('resume')
 
-    if not data:
-        return jsonify({'error': 'No data provided'}), 400
-
-    emails = data.get('emails', [])
-    subject = data.get('subject', '').strip()
-    body = data.get('body', '').strip()
-    sender_email = data.get('sender_email', '').strip()
-    app_password = data.get('app_password', '').strip()
+    emails = [e.strip() for e in emails_raw.split(',') if e.strip()]
 
     # Validation
     if not emails:
@@ -80,6 +78,12 @@ def send_emails():
         return jsonify({'error': 'Email body is required'}), 400
     if not sender_email or not app_password:
         return jsonify({'error': 'Sender email and app password are required'}), 400
+    if not resume_file or resume_file.filename == '':
+        return jsonify({'error': 'Resume attachment is required'}), 400
+
+    # Read resume bytes once
+    resume_bytes = resume_file.read()
+    resume_filename = resume_file.filename
 
     def generate():
         """Generator that yields NDJSON lines as emails are sent."""
@@ -97,7 +101,11 @@ def send_emails():
         failed_count = 0
 
         for i, email in enumerate(emails):
-            success, error = send_single_email(server, sender_email, email, subject, body)
+            success, error = send_single_email(
+                server, sender_email, email, subject, body,
+                attachment_bytes=resume_bytes,
+                attachment_filename=resume_filename
+            )
 
             if success:
                 sent_count += 1

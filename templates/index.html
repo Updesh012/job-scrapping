@@ -78,7 +78,23 @@
             </div>
         </section>
 
-        <!-- ===== Step 4: Extracted Results (hidden until extraction) ===== -->
+        <!-- ===== Step 4: Attach Resume (mandatory) ===== -->
+        <section class="card" id="resume-section">
+            <h2 class="card-title"><span class="icon">📎</span> Attach Resume <span style="color: var(--error); font-size: 0.75rem; font-weight: 400;">(Required)</span></h2>
+            <p class="card-subtitle">Your resume will be attached to every outgoing email.</p>
+
+            <div id="resume-drop-zone" class="drop-zone" style="padding: 28px 24px;">
+                <div class="drop-zone-icon" style="font-size: 1.8rem;">📎</div>
+                <p class="drop-zone-text">
+                    Drop your resume PDF here, or <strong>click to browse</strong>
+                </p>
+                <input type="file" id="resume-input" accept=".pdf">
+            </div>
+
+            <div class="file-list" id="resume-file-display" style="margin-top: 12px;"></div>
+        </section>
+
+        <!-- ===== Step 5: Extracted Results (hidden until extraction) ===== -->
         <section class="card section-hidden" id="results-section">
             <h2 class="card-title"><span class="icon">📋</span> Extracted Emails</h2>
             <p class="card-subtitle">Review the emails found in your PDFs. Uncheck any you don't want to email.</p>
@@ -155,6 +171,7 @@
     ========================================================================= */
     let uploadedFiles = [];       // File objects from input
     let extractedEmails = [];     // Array of email strings after extraction
+    let resumeFile = null;        // Single resume PDF file
     let isSending = false;
 
     /* =========================================================================
@@ -175,6 +192,10 @@
 
     const senderEmail = document.getElementById('sender-email');
     const appPassword = document.getElementById('app-password');
+
+    const resumeDropZone = document.getElementById('resume-drop-zone');
+    const resumeInput = document.getElementById('resume-input');
+    const resumeFileDisplay = document.getElementById('resume-file-display');
 
     const resultsSection = document.getElementById('results-section');
     const emailStatsEl = document.getElementById('email-stats');
@@ -218,6 +239,66 @@
             templateStatus.textContent = 'Template loaded from saved data';
         }
     })();
+
+    /* =========================================================================
+       RESUME UPLOAD
+    ========================================================================= */
+    resumeDropZone.addEventListener('click', () => resumeInput.click());
+
+    resumeDropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        resumeDropZone.classList.add('drag-over');
+    });
+
+    resumeDropZone.addEventListener('dragleave', () => {
+        resumeDropZone.classList.remove('drag-over');
+    });
+
+    resumeDropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        resumeDropZone.classList.remove('drag-over');
+        const file = Array.from(e.dataTransfer.files).find(f => f.type === 'application/pdf');
+        if (file) setResume(file);
+    });
+
+    resumeInput.addEventListener('change', () => {
+        if (resumeInput.files[0]) setResume(resumeInput.files[0]);
+        resumeInput.value = '';
+    });
+
+    function setResume(file) {
+        resumeFile = file;
+        renderResumeDisplay();
+        updateSelectedCount();
+    }
+
+    function removeResume() {
+        resumeFile = null;
+        renderResumeDisplay();
+        updateSelectedCount();
+    }
+
+    function renderResumeDisplay() {
+        resumeFileDisplay.innerHTML = '';
+        if (!resumeFile) {
+            resumeDropZone.style.display = '';
+            return;
+        }
+        // Hide the drop zone when a resume is attached
+        resumeDropZone.style.display = 'none';
+        const sizeKB = (resumeFile.size / 1024).toFixed(1);
+        const item = document.createElement('div');
+        item.className = 'file-item';
+        item.innerHTML = `
+            <div class="file-item-info">
+                <span class="file-icon">📎</span>
+                <span title="${resumeFile.name}">${resumeFile.name}</span>
+            </div>
+            <span class="file-item-size">${sizeKB} KB</span>
+            <button class="file-item-remove" onclick="removeResume()" title="Remove resume">✕</button>
+        `;
+        resumeFileDisplay.appendChild(item);
+    }
 
     /* =========================================================================
        FILE UPLOAD — Drag & Drop + Click
@@ -391,7 +472,7 @@
     function updateSelectedCount() {
         const selected = getSelectedEmails().length;
         selectedCountEl.textContent = `${selected} of ${extractedEmails.length} email${extractedEmails.length !== 1 ? 's' : ''} selected`;
-        sendBtn.disabled = selected === 0;
+        sendBtn.disabled = selected === 0 || !resumeFile;
     }
 
     // Select All
@@ -449,6 +530,11 @@
             senderEmail.focus();
             return;
         }
+        if (!resumeFile) {
+            showToast('⚠️ Please attach your resume before sending', true);
+            resumeDropZone.scrollIntoView({ behavior: 'smooth' });
+            return;
+        }
 
         // Show confirmation modal
         confirmMessage.textContent = `Send your email to ${selected.length} recipient${selected.length > 1 ? 's' : ''}? This will take about ${Math.ceil(selected.length * 1.5 / 60)} minute${Math.ceil(selected.length * 1.5 / 60) > 1 ? 's' : ''}.`;
@@ -483,16 +569,17 @@
         progressSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
         try {
+            const formData = new FormData();
+            formData.append('emails', selectedEmails.join(','));
+            formData.append('subject', emailSubject.value.trim());
+            formData.append('body', emailBody.value.trim());
+            formData.append('sender_email', senderEmail.value.trim());
+            formData.append('app_password', appPassword.value.trim());
+            formData.append('resume', resumeFile);
+
             const response = await fetch('/api/send-emails', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    emails: selectedEmails,
-                    subject: emailSubject.value.trim(),
-                    body: emailBody.value.trim(),
-                    sender_email: senderEmail.value.trim(),
-                    app_password: appPassword.value.trim()
-                })
+                body: formData
             });
 
             if (!response.ok) {

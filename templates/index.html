@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Extract HR emails from PDF job listings and send outreach emails in bulk.">
+    <title>HR Email Extractor & Sender</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="app-container">
+
+        <!-- ===== Header ===== -->
+        <header class="app-header">
+            <h1>📧 HR Email Extractor</h1>
+            <p>Upload PDF job listings → Extract emails → Send outreach in one click</p>
+        </header>
+
+        <!-- ===== Step 1: Upload PDFs ===== -->
+        <section class="card" id="upload-section">
+            <h2 class="card-title"><span class="icon">📄</span> Upload PDF Files</h2>
+            <p class="card-subtitle">Drop your job listing PDFs here. Emails will be extracted from each job separated by =======</p>
+
+            <div class="drop-zone" id="drop-zone">
+                <div class="drop-zone-icon">📁</div>
+                <p class="drop-zone-text">
+                    Drag & drop PDF files here, or <strong>click to browse</strong>
+                </p>
+                <input type="file" id="file-input" accept=".pdf" multiple>
+            </div>
+
+            <div class="file-list" id="file-list"></div>
+
+            <div style="margin-top: 20px; display: flex; gap: 10px; align-items: center;">
+                <button class="btn btn-primary" id="extract-btn" disabled>
+                    <span id="extract-btn-text">Extract Emails</span>
+                </button>
+                <span id="extract-status" style="font-size: 0.82rem; color: var(--text-muted);"></span>
+            </div>
+        </section>
+
+        <!-- ===== Step 2: Email Template ===== -->
+        <section class="card" id="template-section">
+            <h2 class="card-title"><span class="icon">✉️</span> Email Template</h2>
+            <p class="card-subtitle">Compose your outreach email. Template is auto-saved to your browser's local storage.</p>
+
+            <div class="form-group">
+                <label class="form-label" for="email-subject">Subject</label>
+                <input type="text" class="form-input" id="email-subject" placeholder="e.g. Application for Software Developer Position">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="email-body">Body</label>
+                <textarea class="form-textarea" id="email-body" placeholder="Write your email body here...&#10;&#10;Dear Hiring Manager,&#10;&#10;I am writing to express my interest in..."></textarea>
+            </div>
+
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <button class="btn btn-secondary btn-sm" id="save-template-btn">💾 Save Template</button>
+                <button class="btn btn-secondary btn-sm" id="clear-template-btn">🗑️ Clear</button>
+                <span id="template-status" style="font-size: 0.78rem; color: var(--text-muted); margin-left: 4px;"></span>
+            </div>
+        </section>
+
+        <!-- ===== Step 3: Sender Settings ===== -->
+        <section class="card" id="sender-section">
+            <h2 class="card-title"><span class="icon">🔐</span> Sender Settings</h2>
+            <p class="card-subtitle">Enter your Gmail credentials. Use an App Password (not your regular password).</p>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="sender-email">Gmail Address</label>
+                    <input type="email" class="form-input" id="sender-email" placeholder="you@gmail.com">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="app-password">App Password</label>
+                    <input type="password" class="form-input" id="app-password" placeholder="16-character app password">
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== Step 4: Extracted Results (hidden until extraction) ===== -->
+        <section class="card section-hidden" id="results-section">
+            <h2 class="card-title"><span class="icon">📋</span> Extracted Emails</h2>
+            <p class="card-subtitle">Review the emails found in your PDFs. Uncheck any you don't want to email.</p>
+
+            <div id="extraction-errors"></div>
+
+            <div class="email-stats" id="email-stats"></div>
+
+            <div class="email-list-controls">
+                <label>
+                    <input type="checkbox" id="select-all" checked>
+                    Select All
+                </label>
+                <input type="text" class="email-search" id="email-search" placeholder="🔍 Filter emails...">
+            </div>
+
+            <div class="email-list-wrapper" id="email-list-wrapper"></div>
+
+            <p class="selected-count" id="selected-count"></p>
+
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                <button class="btn btn-success" id="send-btn">
+                    <span id="send-btn-text">🚀 Send Emails</span>
+                </button>
+                <button class="btn btn-secondary" id="reset-btn">↩️ Upload More</button>
+            </div>
+        </section>
+
+        <!-- ===== Step 5: Sending Progress (hidden until sending) ===== -->
+        <section class="card section-hidden" id="progress-section">
+            <h2 class="card-title"><span class="icon">📡</span> Sending Progress</h2>
+
+            <div class="progress-container">
+                <div class="progress-stats">
+                    <div class="progress-stat sent">
+                        <div class="progress-stat-value" id="sent-count">0</div>
+                        <div class="progress-stat-label">✅ Sent</div>
+                    </div>
+                    <div class="progress-stat failed">
+                        <div class="progress-stat-value" id="failed-count">0</div>
+                        <div class="progress-stat-label">❌ Failed</div>
+                    </div>
+                    <div class="progress-stat remaining">
+                        <div class="progress-stat-value" id="remaining-count">0</div>
+                        <div class="progress-stat-label">⏳ Remaining</div>
+                    </div>
+                </div>
+
+                <div class="progress-bar-wrapper">
+                    <div class="progress-bar" id="progress-bar"></div>
+                </div>
+
+                <div class="progress-log" id="progress-log"></div>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- ===== Confirmation Modal (hidden) ===== -->
+    <div class="modal-overlay section-hidden" id="confirm-modal">
+        <div class="modal">
+            <h3>📬 Confirm Send</h3>
+            <p id="confirm-message">Are you sure you want to send emails?</p>
+            <div class="modal-actions">
+                <button class="btn btn-secondary btn-sm" id="confirm-cancel">Cancel</button>
+                <button class="btn btn-success btn-sm" id="confirm-send">Yes, Send All</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    /* =========================================================================
+       STATE
+    ========================================================================= */
+    let uploadedFiles = [];       // File objects from input
+    let extractedEmails = [];     // Array of email strings after extraction
+    let isSending = false;
+
+    /* =========================================================================
+       DOM REFS
+    ========================================================================= */
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const fileList = document.getElementById('file-list');
+    const extractBtn = document.getElementById('extract-btn');
+    const extractBtnText = document.getElementById('extract-btn-text');
+    const extractStatus = document.getElementById('extract-status');
+
+    const emailSubject = document.getElementById('email-subject');
+    const emailBody = document.getElementById('email-body');
+    const saveTemplateBtn = document.getElementById('save-template-btn');
+    const clearTemplateBtn = document.getElementById('clear-template-btn');
+    const templateStatus = document.getElementById('template-status');
+
+    const senderEmail = document.getElementById('sender-email');
+    const appPassword = document.getElementById('app-password');
+
+    const resultsSection = document.getElementById('results-section');
+    const emailStatsEl = document.getElementById('email-stats');
+    const emailListWrapper = document.getElementById('email-list-wrapper');
+    const selectAllCheckbox = document.getElementById('select-all');
+    const emailSearchInput = document.getElementById('email-search');
+    const selectedCountEl = document.getElementById('selected-count');
+    const extractionErrorsEl = document.getElementById('extraction-errors');
+
+    const sendBtn = document.getElementById('send-btn');
+    const sendBtnText = document.getElementById('send-btn-text');
+    const resetBtn = document.getElementById('reset-btn');
+
+    const progressSection = document.getElementById('progress-section');
+    const sentCountEl = document.getElementById('sent-count');
+    const failedCountEl = document.getElementById('failed-count');
+    const remainingCountEl = document.getElementById('remaining-count');
+    const progressBar = document.getElementById('progress-bar');
+    const progressLog = document.getElementById('progress-log');
+
+    const confirmModal = document.getElementById('confirm-modal');
+    const confirmMessage = document.getElementById('confirm-message');
+    const confirmCancel = document.getElementById('confirm-cancel');
+    const confirmSend = document.getElementById('confirm-send');
+
+    /* =========================================================================
+       INITIALIZATION — Load saved template from localStorage
+    ========================================================================= */
+    (function init() {
+        const savedSubject = localStorage.getItem('hr_email_subject');
+        const savedBody = localStorage.getItem('hr_email_body');
+        const savedSender = localStorage.getItem('hr_sender_email');
+        const savedPassword = localStorage.getItem('hr_app_password');
+
+        if (savedSubject) emailSubject.value = savedSubject;
+        if (savedBody) emailBody.value = savedBody;
+        if (savedSender) senderEmail.value = savedSender;
+        if (savedPassword) appPassword.value = savedPassword;
+
+        if (savedSubject || savedBody) {
+            templateStatus.textContent = 'Template loaded from saved data';
+        }
+    })();
+
+    /* =========================================================================
+       FILE UPLOAD — Drag & Drop + Click
+    ========================================================================= */
+    dropZone.addEventListener('click', () => fileInput.click());
+
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('drag-over');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('drag-over');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('drag-over');
+        const files = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf');
+        addFiles(files);
+    });
+
+    fileInput.addEventListener('change', () => {
+        const files = Array.from(fileInput.files);
+        addFiles(files);
+        fileInput.value = ''; // Reset so same file can be re-added
+    });
+
+    function addFiles(files) {
+        for (const file of files) {
+            // Avoid duplicates by name
+            if (!uploadedFiles.some(f => f.name === file.name && f.size === file.size)) {
+                uploadedFiles.push(file);
+            }
+        }
+        renderFileList();
+    }
+
+    function removeFile(index) {
+        uploadedFiles.splice(index, 1);
+        renderFileList();
+    }
+
+    function renderFileList() {
+        fileList.innerHTML = '';
+        uploadedFiles.forEach((file, i) => {
+            const item = document.createElement('div');
+            item.className = 'file-item';
+            const sizeKB = (file.size / 1024).toFixed(1);
+            item.innerHTML = `
+                <div class="file-item-info">
+                    <span class="file-icon">📄</span>
+                    <span title="${file.name}">${file.name}</span>
+                </div>
+                <span class="file-item-size">${sizeKB} KB</span>
+                <button class="file-item-remove" onclick="removeFile(${i})" title="Remove">✕</button>
+            `;
+            fileList.appendChild(item);
+        });
+
+        extractBtn.disabled = uploadedFiles.length === 0;
+        extractStatus.textContent = uploadedFiles.length > 0
+            ? `${uploadedFiles.length} file${uploadedFiles.length > 1 ? 's' : ''} ready`
+            : '';
+    }
+
+    /* =========================================================================
+       EXTRACTION — Upload PDFs to backend
+    ========================================================================= */
+    extractBtn.addEventListener('click', async () => {
+        if (uploadedFiles.length === 0) return;
+
+        // Show loading state
+        extractBtn.disabled = true;
+        extractBtnText.innerHTML = '<span class="spinner"></span> Extracting...';
+        extractStatus.textContent = '';
+
+        const formData = new FormData();
+        for (const file of uploadedFiles) {
+            formData.append('pdfs', file);
+        }
+
+        try {
+            const response = await fetch('/api/extract', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || 'Extraction failed');
+            }
+
+            const data = await response.json();
+            extractedEmails = data.all_emails || [];
+
+            // Show errors if any
+            extractionErrorsEl.innerHTML = '';
+            if (data.errors && data.errors.length > 0) {
+                for (const err of data.errors) {
+                    const banner = document.createElement('div');
+                    banner.className = 'error-banner';
+                    banner.innerHTML = `⚠️ <span><strong>${err.filename}</strong>: ${err.error}</span>`;
+                    extractionErrorsEl.appendChild(banner);
+                }
+            }
+
+            // Show stats
+            emailStatsEl.innerHTML = `
+                <span class="stat-badge total">📧 ${data.total_count} unique emails</span>
+                <span class="stat-badge files">📄 ${data.files.length} files processed</span>
+                ${data.errors.length > 0 ? `<span class="stat-badge errors">⚠️ ${data.errors.length} errors</span>` : ''}
+            `;
+
+            renderEmailList();
+            showSection(resultsSection);
+            resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        } catch (err) {
+            extractStatus.textContent = `Error: ${err.message}`;
+            extractStatus.style.color = 'var(--error)';
+        } finally {
+            extractBtn.disabled = false;
+            extractBtnText.textContent = 'Extract Emails';
+        }
+    });
+
+    /* =========================================================================
+       EMAIL LIST — Render, Select, Filter
+    ========================================================================= */
+    function renderEmailList(filter = '') {
+        emailListWrapper.innerHTML = '';
+
+        const filtered = extractedEmails.filter(email =>
+            email.toLowerCase().includes(filter.toLowerCase())
+        );
+
+        if (filtered.length === 0) {
+            emailListWrapper.innerHTML = `
+                <div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 0.85rem;">
+                    ${filter ? 'No emails match your filter' : 'No emails found in the uploaded PDFs'}
+                </div>
+            `;
+            updateSelectedCount();
+            return;
+        }
+
+        for (const email of filtered) {
+            const item = document.createElement('div');
+            item.className = 'email-item';
+            item.innerHTML = `
+                <input type="checkbox" class="email-checkbox" value="${email}" checked>
+                <span>${email}</span>
+            `;
+            emailListWrapper.appendChild(item);
+        }
+
+        // Attach change listeners
+        emailListWrapper.querySelectorAll('.email-checkbox').forEach(cb => {
+            cb.addEventListener('change', updateSelectedCount);
+        });
+
+        updateSelectedCount();
+    }
+
+    function getSelectedEmails() {
+        const checkboxes = emailListWrapper.querySelectorAll('.email-checkbox:checked');
+        return Array.from(checkboxes).map(cb => cb.value);
+    }
+
+    function updateSelectedCount() {
+        const selected = getSelectedEmails().length;
+        selectedCountEl.textContent = `${selected} of ${extractedEmails.length} email${extractedEmails.length !== 1 ? 's' : ''} selected`;
+        sendBtn.disabled = selected === 0;
+    }
+
+    // Select All
+    selectAllCheckbox.addEventListener('change', () => {
+        const checkboxes = emailListWrapper.querySelectorAll('.email-checkbox');
+        checkboxes.forEach(cb => { cb.checked = selectAllCheckbox.checked; });
+        updateSelectedCount();
+    });
+
+    // Search filter
+    emailSearchInput.addEventListener('input', () => {
+        renderEmailList(emailSearchInput.value);
+    });
+
+    /* =========================================================================
+       TEMPLATE — Save / Load / Clear
+    ========================================================================= */
+    saveTemplateBtn.addEventListener('click', () => {
+        localStorage.setItem('hr_email_subject', emailSubject.value);
+        localStorage.setItem('hr_email_body', emailBody.value);
+        localStorage.setItem('hr_sender_email', senderEmail.value);
+        localStorage.setItem('hr_app_password', appPassword.value);
+        showToast('✅ Template & credentials saved to browser storage');
+        templateStatus.textContent = 'Saved just now';
+    });
+
+    clearTemplateBtn.addEventListener('click', () => {
+        emailSubject.value = '';
+        emailBody.value = '';
+        localStorage.removeItem('hr_email_subject');
+        localStorage.removeItem('hr_email_body');
+        templateStatus.textContent = 'Template cleared';
+    });
+
+    /* =========================================================================
+       SEND EMAILS — Confirmation + Streaming Progress
+    ========================================================================= */
+    sendBtn.addEventListener('click', () => {
+        const selected = getSelectedEmails();
+        if (selected.length === 0) return;
+
+        // Validate fields
+        if (!emailSubject.value.trim()) {
+            showToast('⚠️ Please enter an email subject', true);
+            emailSubject.focus();
+            return;
+        }
+        if (!emailBody.value.trim()) {
+            showToast('⚠️ Please enter an email body', true);
+            emailBody.focus();
+            return;
+        }
+        if (!senderEmail.value.trim() || !appPassword.value.trim()) {
+            showToast('⚠️ Please enter your sender email and app password', true);
+            senderEmail.focus();
+            return;
+        }
+
+        // Show confirmation modal
+        confirmMessage.textContent = `Send your email to ${selected.length} recipient${selected.length > 1 ? 's' : ''}? This will take about ${Math.ceil(selected.length * 1.5 / 60)} minute${Math.ceil(selected.length * 1.5 / 60) > 1 ? 's' : ''}.`;
+        showSection(confirmModal);
+    });
+
+    confirmCancel.addEventListener('click', () => hideSection(confirmModal));
+
+    confirmSend.addEventListener('click', async () => {
+        hideSection(confirmModal);
+        await startSending();
+    });
+
+    async function startSending() {
+        if (isSending) return;
+        isSending = true;
+
+        const selectedEmails = getSelectedEmails();
+
+        // Disable send button, show progress section
+        sendBtn.disabled = true;
+        sendBtnText.innerHTML = '<span class="spinner"></span> Sending...';
+        resetBtn.disabled = true;
+
+        // Reset progress UI
+        sentCountEl.textContent = '0';
+        failedCountEl.textContent = '0';
+        remainingCountEl.textContent = selectedEmails.length;
+        progressBar.style.width = '0%';
+        progressLog.innerHTML = '';
+        showSection(progressSection);
+        progressSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        try {
+            const response = await fetch('/api/send-emails', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    emails: selectedEmails,
+                    subject: emailSubject.value.trim(),
+                    body: emailBody.value.trim(),
+                    sender_email: senderEmail.value.trim(),
+                    app_password: appPassword.value.trim()
+                })
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || 'Failed to start sending');
+            }
+
+            // Read NDJSON stream
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop(); // Keep incomplete line in buffer
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    try {
+                        const event = JSON.parse(line);
+                        handleProgressEvent(event, selectedEmails.length);
+                    } catch (e) {
+                        console.warn('Failed to parse progress event:', line);
+                    }
+                }
+            }
+
+            // Process any remaining buffer
+            if (buffer.trim()) {
+                try {
+                    const event = JSON.parse(buffer);
+                    handleProgressEvent(event, selectedEmails.length);
+                } catch (e) {}
+            }
+
+        } catch (err) {
+            const errorEntry = document.createElement('div');
+            errorEntry.className = 'log-entry failed';
+            errorEntry.innerHTML = `
+                <span class="status-icon">❌</span>
+                <span class="log-email">${err.message}</span>
+            `;
+            progressLog.prepend(errorEntry);
+        } finally {
+            isSending = false;
+            sendBtn.disabled = false;
+            sendBtnText.textContent = '🚀 Send Emails';
+            resetBtn.disabled = false;
+        }
+    }
+
+    function handleProgressEvent(event, totalCount) {
+        if (event.type === 'error') {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry failed';
+            entry.innerHTML = `
+                <span class="status-icon">❌</span>
+                <span class="log-email">${event.message}</span>
+            `;
+            progressLog.prepend(entry);
+            return;
+        }
+
+        if (event.type === 'progress') {
+            sentCountEl.textContent = event.sent_count;
+            failedCountEl.textContent = event.failed_count;
+            remainingCountEl.textContent = totalCount - event.index;
+            progressBar.style.width = `${(event.index / totalCount) * 100}%`;
+
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${event.success ? 'success' : 'failed'}`;
+            entry.innerHTML = `
+                <span class="status-icon">${event.success ? '✅' : '❌'}</span>
+                <span class="log-email">${event.email}</span>
+                ${event.error ? `<span class="log-error" title="${event.error}">${event.error}</span>` : ''}
+            `;
+            progressLog.prepend(entry);
+            return;
+        }
+
+        if (event.type === 'complete') {
+            progressBar.style.width = '100%';
+            const summary = document.createElement('div');
+            summary.className = 'log-entry success';
+            summary.style.fontWeight = '600';
+            summary.innerHTML = `
+                <span class="status-icon">🎉</span>
+                <span class="log-email">Complete — ${event.sent_count} sent, ${event.failed_count} failed</span>
+            `;
+            progressLog.prepend(summary);
+        }
+    }
+
+    /* =========================================================================
+       RESET — Upload More
+    ========================================================================= */
+    resetBtn.addEventListener('click', () => {
+        uploadedFiles = [];
+        extractedEmails = [];
+        renderFileList();
+        hideSection(resultsSection);
+        hideSection(progressSection);
+        emailSearchInput.value = '';
+        selectAllCheckbox.checked = true;
+        extractStatus.textContent = '';
+        extractStatus.style.color = '';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    /* =========================================================================
+       UTILITIES
+    ========================================================================= */
+    function showSection(el) {
+        el.classList.remove('section-hidden');
+        el.classList.add('section-visible');
+    }
+
+    function hideSection(el) {
+        el.classList.add('section-hidden');
+        el.classList.remove('section-visible');
+    }
+
+    function showToast(message, isError = false) {
+        // Remove existing toasts
+        document.querySelectorAll('.toast').forEach(t => t.remove());
+
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        if (isError) {
+            toast.style.borderColor = 'var(--warning)';
+            toast.style.color = 'var(--warning)';
+        }
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 2500);
+    }
+    </script>
+</body>
+</html>

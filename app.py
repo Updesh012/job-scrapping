@@ -12,6 +12,17 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-production')
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB max upload
+
+
+@app.errorhandler(413)
+def too_large(e):
+    return jsonify({'error': 'File too large. Maximum upload size is 16 MB.'}), 413
+
+
+@app.errorhandler(500)
+def server_error(e):
+    return jsonify({'error': f'Internal server error: {str(e)}'}), 500
 
 
 @app.route('/')

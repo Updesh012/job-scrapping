@@ -22,7 +22,22 @@ def too_large(e):
 
 @app.errorhandler(500)
 def server_error(e):
-    return jsonify({'error': f'Internal server error: {str(e)}'}), 500
+    import traceback
+    tb = traceback.format_exc()
+    return jsonify({
+        'error': f'Internal server error: {str(e)}',
+        'traceback': tb
+    }), 500
+
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    import traceback
+    tb = traceback.format_exc()
+    return jsonify({
+        'error': f'{type(e).__name__}: {str(e)}',
+        'traceback': tb
+    }), 500
 
 
 @app.route('/')
